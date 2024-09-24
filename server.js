@@ -3,13 +3,15 @@ const dotenv = require('dotenv');
 const mongoose = require('mongoose');
 const cron = require('node-cron');
 const firebaseAdmin = require('firebase-admin');
-const path = require('path');  // Add this to ensure path is handled correctly
+const path = require('path');
 const Task = require('./models/Task');
 const User = require('./models/User');
 const { protect } = require('./middleware/authMiddleware');
 const authRoutes = require('./routes/authRoutes');
 const taskRoutes = require('./routes/taskRoutes');
 const { sendPushNotification } = require('./controllers/notificationController');
+const nodemailer = require('nodemailer');
+const analyticsRoutes = require('./routes/analyticsRoutes'); 
 
 // Load environment variables from .env file
 dotenv.config();
@@ -22,7 +24,7 @@ const serviceAccountPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
 // Initialize Firebase Admin SDK only if the serviceAccountPath is provided
 if (serviceAccountPath) {
   try {
-    const serviceAccount = require(path.resolve(serviceAccountPath));  // Dynamically load the JSON file
+    const serviceAccount = require(path.resolve(serviceAccountPath));
     firebaseAdmin.initializeApp({
       credential: firebaseAdmin.credential.cert(serviceAccount),
     });
@@ -66,7 +68,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/tasks', taskRoutes);
 
 // Task recurrence logic (Daily, Weekly, Monthly reset)
-cron.schedule('*/5 * * * *', async () => {  // Runs every 5 minutes
+cron.schedule('*/5 * * * *', async () => {
   try {
     const now = new Date();
     const recurringTasks = await Task.find({ recurrence: { $ne: 'None' }, status: 'Completed' });
@@ -94,7 +96,10 @@ cron.schedule('*/5 * * * *', async () => {  // Runs every 5 minutes
   }
 });
 
-// High-Priority Task Notifications
+// Analytics routes
+app.use('/api/analytics', analyticsRoutes); 
+
+// High-Priority Task Notifications (Email + Push Notifications)
 cron.schedule('*/5 * * * *', async () => {  // Runs every 5 minutes
   const now = new Date();
   const oneHourFromNow = new Date();
@@ -110,9 +115,20 @@ cron.schedule('*/5 * * * *', async () => {  // Runs every 5 minutes
 
     highPriorityTasks.forEach(async (task) => {
       const user = await User.findById(task.user);
+      
       if (user && user.fcmToken) {
         sendPushNotification(user.fcmToken, `Task "${task.title}" is due soon.`);
       }
+      
+      if (user && user.email) {
+        // Send email notification
+        sendEmailNotification(
+          user.email,
+          'Task Reminder',
+          `Task "${task.title}" is due in one hour. Make sure to complete it on time.`
+        );
+      }
+      
       task.notified = true;
       await task.save();
     });
@@ -120,6 +136,62 @@ cron.schedule('*/5 * * * *', async () => {  // Runs every 5 minutes
     console.error('Error sending high-priority notifications:', error);
   }
 });
+
+// Overdue Task Notifications (Email Reminders)
+cron.schedule('0 9 * * *', async () => {  // Runs every day at 9 AM
+  const now = new Date();
+
+  try {
+    const overdueTasks = await Task.find({
+      dueDate: { $lte: now },
+      status: 'Pending',
+      notified: false,
+    });
+
+    overdueTasks.forEach(async (task) => {
+      const user = await User.findById(task.user);
+
+      if (user && user.email) {
+        sendEmailNotification(
+          user.email,
+          'Overdue Task Reminder',
+          `Task "${task.title}" is overdue. Please complete it as soon as possible.`
+        );
+      }
+      
+      task.notified = true;
+      await task.save();
+    });
+  } catch (error) {
+    console.error('Error sending overdue task notifications:', error);
+  }
+});
+
+// Configure Nodemailer transporter
+const transporter = nodemailer.createTransport({
+  service: 'Gmail',  
+  auth: {
+    user: process.env.EMAIL_USERNAME,
+    pass: process.env.EMAIL_PASSWORD,
+  },
+});
+
+// Function to send email notifications
+const sendEmailNotification = async (email, subject, text) => {
+  const mailOptions = {
+    from: process.env.EMAIL_USERNAME,  
+    to: email,
+    subject: subject,
+    text: text,
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log(`Email sent to ${email}`);
+  } catch (error) {
+    console.error(`Error sending email to ${email}:`, error);
+  }
+};
 
 // Start the server
 app.listen(PORT, () => {
