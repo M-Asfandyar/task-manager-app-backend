@@ -39,7 +39,8 @@ if (serviceAccountPath) {
 // Middleware to parse JSON requests
 app.use(express.json());
 
-const PORT = process.env.PORT || 5000;
+// Define PORT dynamically for production and testing
+const PORT = process.env.PORT || (process.env.NODE_ENV === 'test' ? 5001 : 5000);
 
 // Root route
 app.get('/', (req, res) => {
@@ -49,10 +50,7 @@ app.get('/', (req, res) => {
 // Connect to MongoDB
 const connectDB = async () => {
   try {
-    await mongoose.connect(process.env.MONGO_URI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-    });
+    await mongoose.connect(process.env.MONGO_URI);  // No need for options
     console.log('MongoDB connected');
   } catch (error) {
     console.error(`Error: ${error.message}`);
@@ -97,7 +95,7 @@ cron.schedule('*/5 * * * *', async () => {
 });
 
 // Analytics routes
-app.use('/api/analytics', analyticsRoutes); 
+app.use('/api/analytics', analyticsRoutes);
 
 // High-Priority Task Notifications (Email + Push Notifications)
 cron.schedule('*/5 * * * *', async () => {  // Runs every 5 minutes
@@ -193,7 +191,12 @@ const sendEmailNotification = async (email, subject, text) => {
   }
 };
 
-// Start the server
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+// Start the server only if not in test environment
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+}
+
+// Export app for testing
+module.exports = app;
