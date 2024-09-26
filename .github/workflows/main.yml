@@ -21,11 +21,13 @@ jobs:
     - name: Install dependencies
       run: npm install
 
+    - name: Run tests
+      run: npm test
 
     - name: Deploy to Heroku
-      env:
-        HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
-      run: |
-        echo "$HEROKU_API_KEY" | heroku auth:token
-        heroku git:remote -a task-manager-app-backend
-        git push heroku main
+      uses: akhileshns/heroku-deploy@v3.12.12  
+      with:
+        heroku_api_key: ${{ secrets.HEROKU_API_KEY }}  
+        heroku_app_name: "task-manager-app-backend"  
+        heroku_email: "faandy8591@gmail.com" 
+        branch: main  
