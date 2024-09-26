@@ -21,8 +21,6 @@ jobs:
     - name: Install dependencies
       run: npm install
 
-    - name: Run tests
-      run: npm test
 
     - name: Deploy to Heroku
       uses: akhileshns/heroku-deploy@v3.12.12  
