@@ -21,10 +21,11 @@ jobs:
     - name: Install dependencies
       run: npm install
 
+
     - name: Deploy to Heroku
       env:
         HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
       run: |
-        git remote add heroku https://git.heroku.com/task-manager-app-backend.git
-        git push heroku main  
-
+        echo "$HEROKU_API_KEY" | heroku auth:token
+        heroku git:remote -a task-manager-app-backend
+        git push heroku main
