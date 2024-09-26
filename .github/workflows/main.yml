@@ -26,4 +26,5 @@ jobs:
         HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
       run: |
         git remote add heroku https://git.heroku.com/task-manager-app-backend.git
-        git push heroku master
+        git push heroku main  
+
